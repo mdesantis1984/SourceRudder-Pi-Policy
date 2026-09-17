@@ -83,16 +83,22 @@ Operators need one auditable policy layer that prevents agents and skills from s
 
 ## Progress
 
-- Repository initialized on `feat/pi-sourcerudder-policy` with no commits yet.
+- Repository initialized on `feat/pi-sourcerudder-policy`.
+- Bootstrap commit `91b397a4c37c92c590ca7cd70cd484b36a6ba757` records repository hygiene and this ODD plan.
 - Source OpenCode behavior and Pi extension APIs mapped read-only.
 - Current SourceRudder server observed with 29 tools, so the Pi port will use robust SourceRudder route detection rather than the source plugin's obsolete nine-tool list.
 - `feature-branch-chain` selected for reviewable local work-unit commits.
-- PSP-001 is in progress.
+- PSP-001 is blocked before implementation: this Pi session started before the directory was a Git repository, so the subagent runtime cannot bind the newly created worktree. The worker failed before editing any files.
 
 ## Verification evidence
 
-- Pending implementation.
+- `git diff --cached --check`: passed before bootstrap commit.
+- PSP-001 checks: not run; implementation did not start.
+
+## Blocker
+
+Start or reload Pi from this now-initialized repository so the parent session is bound to its Git worktree. Then resume PSP-001 with the bounded writer.
 
 ## Next step
 
-Implement PSP-001 with one bounded writer.
+Reload the Pi session in this workspace, reconcile this file with Engram topic `odd/pi-sourcerudder-policy/tasks`, and delegate PSP-001.
