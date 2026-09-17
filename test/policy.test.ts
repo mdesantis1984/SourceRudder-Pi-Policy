@@ -26,7 +26,7 @@ test("recognizes direct, namespaced, and generic SourceRudder MCP routes", () =>
     ["mcp__sourcerudder__search_web", { query: "Pi extensions" }],
     ["mcp", { server: "sourcerudder", tool: "search_web" }],
     ["mcp", { server: "source-rudder", tool: "fetch_url" }],
-    ["mcp", { server: "other", tool: "sourcerudder_search_web" }],
+    ["mcp", { tool: "sourcerudder_search_web" }],
   ];
 
   for (const [toolName, args] of routes) {
@@ -37,6 +37,21 @@ test("recognizes direct, namespaced, and generic SourceRudder MCP routes", () =>
       reason: "SourceRudder MCP route is permitted for web research.",
     });
   }
+});
+
+test("does not trust a SourceRudder-named tool from an explicit foreign MCP server", () => {
+  const spoofedRoute = { server: "brave", tool: "sourcerudder_search_web" };
+  assert.equal(isSourceRudderCall("mcp", spoofedRoute), false);
+  assert.equal(
+    classifyToolCall("mcp", spoofedRoute).classification,
+    "mcp-web-research",
+  );
+
+  assert.equal(
+    isSourceRudderCall("mcp", { server: "sourcerudder", tool: "search_web" }),
+    true,
+  );
+  assert.equal(isSourceRudderCall("mcp", { tool: "sourcerudder_search_web" }), true);
 });
 
 test("blocks each exact Pi-native and OpenCode-compatible research tool", () => {
@@ -53,6 +68,7 @@ test("blocks explicit non-SourceRudder MCP web research actions", () => {
   const routes: Array<[string, unknown]> = [
     ["mcp__brave__web_search", {}],
     ["mcp", { server: "other-research", tool: "fetch_url" }],
+    ["mcp", { server: "other-research", tool: "source_check" }],
     ["mcp", { server: "other-research", tool: "browser_open" }],
     ["mcp", { server: "other-research", tool: "search_news" }],
     ["mcp", { server: "other-research", tool: "image_search" }],

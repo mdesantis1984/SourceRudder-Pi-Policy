@@ -224,7 +224,7 @@ function normalizedIdentifier(value: string): string {
 }
 
 function isSourceRudderIdentifier(value: string): boolean {
-  return normalizedIdentifier(value).includes("sourcerudder");
+  return normalizedIdentifier(value) === "sourcerudder";
 }
 
 function isNamespacedMcpTool(name: string): boolean {
@@ -263,8 +263,9 @@ function isKnownWebResearchServer(value: string | undefined): boolean {
 
 /**
  * Returns true only for direct sourcerudder_* calls, the mcp__sourcerudder
- * namespace, or MCP gateway calls whose server or underlying tool identifies
- * SourceRudder.
+ * namespace, or MCP gateway calls whose explicit server identifies SourceRudder.
+ * A generic gateway can use an exact SourceRudder-prefixed tool only when it
+ * does not provide a server identity.
  */
 export function isSourceRudderCall(toolName: string, args?: unknown): boolean {
   if (toolName.toLowerCase().startsWith("sourcerudder_")) return true;
@@ -276,11 +277,10 @@ export function isSourceRudderCall(toolName: string, args?: unknown): boolean {
 
   if (toolName !== "mcp") return false;
   const server = stringArgument(args, ["server", "serverName", "mcpServer"]);
+  if (server !== undefined) return isSourceRudderIdentifier(server);
+
   const tool = stringArgument(args, ["tool", "toolName", "action"]);
-  return Boolean(
-    (server && isSourceRudderIdentifier(server)) ||
-      (tool && isSourceRudderIdentifier(tool)),
-  );
+  return tool?.toLowerCase().startsWith("sourcerudder_") ?? false;
 }
 
 /** The six exact Pi/OpenCode native research tool names are always blocked. */
@@ -301,6 +301,7 @@ function isExplicitWebResearchAction(action: string): boolean {
       "fetchurl",
       "fetchcontent",
       "getsearchcontent",
+      "sourcecheck",
       "browseropen",
       "browsersearch",
       "browseweb",
