@@ -48,16 +48,17 @@ Operators need one auditable policy layer that prevents agents and skills from s
 - Strategy: `ask-on-risk`.
 - Forecast: approximately 650–850 authored changed lines across runtime, tests, package metadata, and concise bilingual operations documentation.
 - Chain strategy: `feature-branch-chain`, explicitly selected by the user. Each task closes as a reviewable local commit on `feat/pi-sourcerudder-policy`; PR creation remains a later user decision.
+- Running authored count: approximately 794 lines through PSP-001, excluding the generated lockfile. Slice 1 contains `4c554373e67c2eaf005e7e014a7d746a1233cbda`. The cohesive policy vocabulary and regression suite exceeded the advisory per-task heuristic; they remain together to keep the enforcement contract and its proof atomic.
 
 ## Tasks
 
-- [ ] **PSP-001 — Implement the policy domain and retry guard**
+- [x] **PSP-001 — Implement the policy domain and retry guard**
   - Define SourceRudder route detection across direct, generic MCP, and namespaced MCP calls.
   - Define precise alternative web-research blocking without blocking local/code search.
   - Implement idempotent policy-guidance replacement and session-scoped identical-attempt accounting.
   - Add focused unit tests for allow/block classification, guidance preservation, 11/12 behavior, and successful reset.
-  - Checks: focused Node tests and TypeScript typecheck.
-  - Commit evidence: pending.
+  - Checks: focused Node tests and TypeScript typecheck passed; independent semantic verification passed after one bounded correction.
+  - Commit evidence: `4c554373e67c2eaf005e7e014a7d746a1233cbda` (`feat(policy): enforce SourceRudder research boundary`).
 
 - [ ] **PSP-002 — Integrate the Pi extension runtime**
   - Register `before_agent_start`, `tool_call`, `tool_result`, and session cleanup hooks using Pi's documented API.
@@ -88,17 +89,23 @@ Operators need one auditable policy layer that prevents agents and skills from s
 - Source OpenCode behavior and Pi extension APIs mapped read-only.
 - Current SourceRudder server observed with 29 tools, so the Pi port will use robust SourceRudder route detection rather than the source plugin's obsolete nine-tool list.
 - `feature-branch-chain` selected for reviewable local work-unit commits.
-- PSP-001 is blocked before implementation: this Pi session started before the directory was a Git repository, so the subagent runtime cannot bind the newly created worktree. The worker failed before editing any files.
+- The Pi session was reloaded in the initialized repository; the local file and Engram mirror were reconciled with no conflict.
+- PSP-001 completed. Independent verification initially found retry-state eviction bypass and local MCP fetch overblocking; both were corrected and regression-tested before commit.
 
 ## Verification evidence
 
 - `git diff --cached --check`: passed before bootstrap commit.
-- PSP-001 checks: not run; implementation did not start.
+- Writer: `npm install --ignore-scripts` passed with 0 vulnerabilities; `npm run typecheck` passed; `npm test` passed (8/8).
+- Independent verifier: `npm run typecheck`, `npm test`, and `git diff --check` passed, but semantic review found retry-state eviction bypass and local MCP fetch overblocking.
+- Native assessment: unavailable (empty native output), so verification followed the high-risk fallback plan.
+- Correction writer: `npm run typecheck`, `npm test` (10/10), and `git diff --check` passed.
+- Fresh independent re-verifier: no findings; typecheck, 10/10 tests, and diff check passed.
+- Parent spot check: `npm test` passed (10/10).
 
 ## Blocker
 
-Start or reload Pi from this now-initialized repository so the parent session is bound to its Git worktree. Then resume PSP-001 with the bounded writer.
+None.
 
 ## Next step
 
-Reload the Pi session in this workspace, reconcile this file with Engram topic `odd/pi-sourcerudder-policy/tasks`, and delegate PSP-001.
+PSP-001 is closed. Begin PSP-002 only when requested or when continuing the feature.
