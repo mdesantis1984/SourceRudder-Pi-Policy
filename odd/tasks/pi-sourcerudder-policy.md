@@ -48,7 +48,7 @@ Operators need one auditable policy layer that prevents agents and skills from s
 - Strategy: `ask-on-risk`.
 - Forecast: approximately 650–850 authored changed lines across runtime, tests, package metadata, and concise bilingual operations documentation.
 - Chain strategy: `feature-branch-chain`, explicitly selected by the user. Each task closes as a reviewable local commit on `feat/pi-sourcerudder-policy`; PR creation remains a later user decision.
-- Running authored count: approximately 794 lines through PSP-001, excluding the generated lockfile. Slice 1 contains `4c554373e67c2eaf005e7e014a7d746a1233cbda`. The cohesive policy vocabulary and regression suite exceeded the advisory per-task heuristic; they remain together to keep the enforcement contract and its proof atomic.
+- Running authored count: approximately 1,364 lines through PSP-002, excluding generated lockfiles. Slice 1 contains `4c554373e67c2eaf005e7e014a7d746a1233cbda`; slice 2 contains `d51d304e761ac0f2920dd735c34b88fb82a9d7ca`. Both cohesive enforcement units exceeded the advisory per-task heuristic because their policy/runtime behavior and regression proof remain atomic.
 
 ## Tasks
 
@@ -60,12 +60,12 @@ Operators need one auditable policy layer that prevents agents and skills from s
   - Checks: focused Node tests and TypeScript typecheck passed; independent semantic verification passed after one bounded correction.
   - Commit evidence: `4c554373e67c2eaf005e7e014a7d746a1233cbda` (`feat(policy): enforce SourceRudder research boundary`).
 
-- [ ] **PSP-002 — Integrate the Pi extension runtime**
+- [x] **PSP-002 — Integrate the Pi extension runtime**
   - Register `before_agent_start`, `tool_call`, `tool_result`, and session cleanup hooks using Pi's documented API.
   - Wire runtime blocking reasons and SourceRudder success tracking.
   - Add handler-level tests covering agents/skills and MCP gateway shapes.
-  - Checks: full test suite and TypeScript typecheck.
-  - Commit evidence: pending.
+  - Checks: typecheck, full 21-test suite, 10-test handler harness, diff check, independent semantic verification, and parent spot check passed.
+  - Commit evidence: `d51d304e761ac0f2920dd735c34b88fb82a9d7ca` (`feat(extension): enforce SourceRudder policy in Pi runtime`).
 
 - [ ] **PSP-003 — Package and document safe operation**
   - Add Pi package metadata, build/package validation, CI, and minimal repository hygiene.
@@ -91,6 +91,10 @@ Operators need one auditable policy layer that prevents agents and skills from s
 - `feature-branch-chain` selected for reviewable local work-unit commits.
 - The Pi session was reloaded in the initialized repository; the local file and Engram mirror were reconciled with no conflict.
 - PSP-001 completed. Independent verification initially found retry-state eviction bypass and local MCP fetch overblocking; both were corrected and regression-tested before commit.
+- PSP-002 initial implementation required a resume after the first delegated run timed out after writing `src/index.ts`; the resumed writer completed the first implementation and 19 tests passed.
+- Independent verification found three high-severity fail-open/reset risks and one medium test-fidelity gap: an explicit non-SourceRudder server could spoof a SourceRudder tool name, `source_check` was not blocked when re-exposed through MCP, result resets trusted only `toolCallId`, and tests fabricated event shapes excluded by Pi 0.85.1 types.
+- The correction continuation timed out after editing the intended policy/runtime/test files and entering a verification command; it returned no trustworthy command results. A fresh bounded writer recovered the partial work, completed real-shape tests, and passed all checks.
+- PSP-002 completed. Fresh independent verification found no remaining findings; explicit MCP server identity, `source_check`, exact result correlation, duplicate call IDs, session cleanup, and real Pi event shapes are covered.
 
 ## Verification evidence
 
@@ -101,6 +105,12 @@ Operators need one auditable policy layer that prevents agents and skills from s
 - Correction writer: `npm run typecheck`, `npm test` (10/10), and `git diff --check` passed.
 - Fresh independent re-verifier: no findings; typecheck, 10/10 tests, and diff check passed.
 - Parent spot check: `npm test` passed (10/10).
+- PSP-002 writer: `npm install --ignore-scripts` passed with 0 vulnerabilities; `npm run typecheck`, `npm test` (19/19), handler harness (9/9), and `git diff --check` passed.
+- PSP-002 independent verifier: all commands passed, but semantic review found three high-severity fail-open/reset risks and one medium mock/type divergence; PSP-002 is not yet committable.
+- PSP-002 native assessment: unavailable (empty native output), so verification followed the high-risk fallback plan.
+- PSP-002 recovery writer: `npm run typecheck`, `npm test` (21/21), handler harness (10/10), and `git diff --check` passed.
+- PSP-002 fresh independent re-verifier: no findings; all four checks passed.
+- PSP-002 parent spot check: `npm test` passed (21/21).
 
 ## Blocker
 
@@ -108,4 +118,4 @@ None.
 
 ## Next step
 
-PSP-001 is closed. Begin PSP-002 only when requested or when continuing the feature.
+PSP-002 is closed. Begin PSP-003 to package, validate, and document installation and rollback.
