@@ -1,0 +1,10 @@
+# Local Pi runtime state
+.atl/
+
+# Local desktop metadata
+.directory
+
+# Generated package state
+node_modules/
+dist/
+coverage/
