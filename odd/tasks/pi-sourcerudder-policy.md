@@ -48,7 +48,7 @@ Operators need one auditable policy layer that prevents agents and skills from s
 - Strategy: `ask-on-risk`.
 - Forecast: approximately 650–850 authored changed lines across runtime, tests, package metadata, and concise bilingual operations documentation.
 - Chain strategy: `feature-branch-chain`, explicitly selected by the user. Each task closes as a reviewable local commit on `feat/pi-sourcerudder-policy`; PR creation remains a later user decision.
-- Running authored count: approximately 1,364 lines through PSP-002, excluding generated lockfiles. Slice 1 contains `4c554373e67c2eaf005e7e014a7d746a1233cbda`; slice 2 contains `d51d304e761ac0f2920dd735c34b88fb82a9d7ca`. Both cohesive enforcement units exceeded the advisory per-task heuristic because their policy/runtime behavior and regression proof remain atomic.
+- Final authored count: approximately 2,288 lines, excluding generated lockfile churn. Slice 1 contains `4c554373e67c2eaf005e7e014a7d746a1233cbda`; slice 2 contains `d51d304e761ac0f2920dd735c34b88fb82a9d7ca`; slice 3 contains `73f6f1d15b8b1e84d7f5078a81c31c39e30b2775`. Each cohesive enforcement/operations unit exceeded the advisory per-task heuristic because behavior, proof, and operator guidance remain atomic.
 
 ## Tasks
 
@@ -67,11 +67,11 @@ Operators need one auditable policy layer that prevents agents and skills from s
   - Checks: typecheck, full 21-test suite, 10-test handler harness, diff check, independent semantic verification, and parent spot check passed.
   - Commit evidence: `d51d304e761ac0f2920dd735c34b88fb82a9d7ca` (`feat(extension): enforce SourceRudder policy in Pi runtime`).
 
-- [ ] **PSP-003 — Package and document safe operation**
+- [x] **PSP-003 — Package and document safe operation**
   - Add Pi package metadata, build/package validation, CI, and minimal repository hygiene.
   - Document installation, verification, policy boundary, rollback, and the external-MCP limitation in English and Spanish.
-  - Checks: `npm run check` and an installed-package smoke test or an explicit environment limitation.
-  - Commit evidence: pending.
+  - Checks: `npm run check`, package/docs validation, exact-version installed-package smoke harness, independent semantic verification, and parent spot check passed.
+  - Commit evidence: `73f6f1d15b8b1e84d7f5078a81c31c39e30b2775` (`feat(package): add verified Pi distribution workflow`).
 
 ## Acceptance criteria
 
@@ -95,6 +95,10 @@ Operators need one auditable policy layer that prevents agents and skills from s
 - Independent verification found three high-severity fail-open/reset risks and one medium test-fidelity gap: an explicit non-SourceRudder server could spoof a SourceRudder tool name, `source_check` was not blocked when re-exposed through MCP, result resets trusted only `toolCallId`, and tests fabricated event shapes excluded by Pi 0.85.1 types.
 - The correction continuation timed out after editing the intended policy/runtime/test files and entering a verification command; it returned no trustworthy command results. A fresh bounded writer recovered the partial work, completed real-shape tests, and passed all checks.
 - PSP-002 completed. Fresh independent verification found no remaining findings; explicit MCP server identity, `source_check`, exact result correlation, duplicate call IDs, session cleanup, and real Pi event shapes are covered.
+- PSP-003 initial implementation passed full package/docs/install checks, but independent verification found a medium contract conflict: the package used a narrow Pi peer range while the installed official Pi package guide requires `"*"`. The official Pi contract governs.
+- The first correction continuation timed out after updating only `package.json`; a fresh bounded writer completed the official wildcard peer correction and all checks passed.
+- Parent structural readback then found one reproducibility gap in `scripts/verify-installed.mjs`: the temporary install relied on wildcard peer auto-resolution before asserting Pi `0.85.1`. The harness now installs the exact development baseline explicitly while preserving the official wildcard runtime peer.
+- PSP-003 completed. The package remains private, ships exactly 11 allowlisted files, uses least-privilege pinned CI, and includes bilingual installation/rollback documentation.
 
 ## Verification evidence
 
@@ -111,6 +115,14 @@ Operators need one auditable policy layer that prevents agents and skills from s
 - PSP-002 recovery writer: `npm run typecheck`, `npm test` (21/21), handler harness (10/10), and `git diff --check` passed.
 - PSP-002 fresh independent re-verifier: no findings; all four checks passed.
 - PSP-002 parent spot check: `npm test` passed (21/21).
+- PSP-003 writer: `npm install --ignore-scripts`, `npm run check`, package/docs checks, installed-package harness, and `git diff --check` passed; the pack contained 11 allowlisted files.
+- PSP-003 independent verifier: all mechanical checks passed, but found a medium peer-range conflict with official Pi package guidance; PSP-003 is not yet committable.
+- PSP-003 native assessment: unavailable (empty native output), so verification follows the high-risk fallback plan.
+- PSP-003 wildcard correction writer: full check, 21/21 tests, package/docs checks, installed harness, and diff check passed.
+- PSP-003 wildcard re-verifier: no findings; all checks passed.
+- PSP-003 parent structural readback: package/docs contract was correct; the installed harness's wildcard peer auto-resolution was corrected to install the exact Pi development baseline.
+- PSP-003 final verifier: no findings; exact-version installed harness, full check, and diff check passed.
+- PSP-003 parent spot check: `npm run verify:installed` passed.
 
 ## Blocker
 
@@ -118,4 +130,4 @@ None.
 
 ## Next step
 
-PSP-002 is closed. Begin PSP-003 to package, validate, and document installation and rollback.
+All ODD tasks are closed. Installation into user or project Pi settings, push, PR creation, and publication remain explicit user decisions.
