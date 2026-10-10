@@ -4,6 +4,7 @@ import {
   POLICY_GUIDANCE,
   classifyToolCall,
   injectPolicyGuidance,
+  sourceRudderRedirect,
 } from "./policy.js";
 import { IdenticalAttemptGuard, fingerprintToolAttempt } from "./retry-guard.js";
 import { OneShotConsent, type ConsentDenialCode, type ConsentStage } from "./one-shot-consent.js";
@@ -12,6 +13,8 @@ interface PendingSourceRudderCall {
   sessionId: string;
   toolName: string;
   fingerprint: string;
+  eligibilityEpoch: number;
+  resolved?: boolean;
 }
 
 function pendingCallKey(sessionId: string, toolCallId: string): string {
@@ -39,6 +42,12 @@ export default function sourceRudderPolicyExtension(pi: ExtensionAPI): void {
   const consent = new OneShotConsent();
   const attemptGuard = new IdenticalAttemptGuard();
   const pendingSourceRudderCalls = new Map<string, PendingSourceRudderCall>();
+  const failedSourceRudderSessions = new Set<string>();
+  let eligibilityEpoch = 0;
+  const resetEligibility = (): void => {
+    failedSourceRudderSessions.clear();
+    eligibilityEpoch++;
+  };
 
   const sessionIdFor = (ctx: ExtensionContext): string =>
     ctx.sessionManager.getSessionId();
@@ -59,6 +68,9 @@ export default function sourceRudderPolicyExtension(pi: ExtensionAPI): void {
   pi.on("tool_call", async (event, ctx) => {
     const decision = classifyToolCall(event.toolName, event.input);
     if (!decision.allowed) {
+      if (!failedSourceRudderSessions.has(sessionIdFor(ctx))) {
+        return { block: true, reason: `${decision.reason} ${sourceRudderRedirect(event.toolName, event.input)} [policy_denial=sourcerudder_first]` };
+      }
       // Invocation-local observation: parallel calls cannot borrow a last-result code.
       let denial: ConsentDenialCode = "context_error";
       const stages: ConsentStage[] = [];
@@ -92,6 +104,7 @@ export default function sourceRudderPolicyExtension(pi: ExtensionAPI): void {
       sessionId,
       toolName: event.toolName,
       fingerprint,
+      eligibilityEpoch,
     });
   });
 
@@ -104,26 +117,35 @@ export default function sourceRudderPolicyExtension(pi: ExtensionAPI): void {
     if (
       !pendingCall ||
       pendingCall.sessionId !== sessionId ||
-      event.isError ||
+      pendingCall.resolved ||
       pendingCall.toolName !== event.toolName ||
       pendingCall.fingerprint !== fingerprintToolAttempt(event.toolName, event.input)
     ) {
       return;
     }
 
+    // Only a correlated, newly resolved result can change contingency eligibility.
+    // Old lifecycle results may still settle retry state, but cannot enable consent.
+    pendingCall.resolved = true;
+    if (pendingCall.eligibilityEpoch === eligibilityEpoch) {
+      if (event.isError) failedSourceRudderSessions.add(sessionId);
+      else failedSourceRudderSessions.delete(sessionId);
+    }
+    if (event.isError) return; // Keep the failed attempt unresolved for the 11/12 guard.
     attemptGuard.recordSuccess(pendingCall.sessionId, pendingCall.fingerprint);
     pendingSourceRudderCalls.delete(key);
   });
 
   pi.on("session_shutdown", (_event, ctx) => {
     consent.revoke();
+    resetEligibility();
     clearSession(sessionIdFor(ctx));
   });
-  pi.on("session_start", (_event, ctx) => { consent.activate(ctx); });
-  pi.on("session_before_switch", () => { consent.revoke(); });
-  pi.on("session_before_fork", () => { consent.revoke(); });
-  pi.on("session_before_tree", () => { consent.revoke(); });
-  pi.on("session_tree", (_event, ctx) => { consent.activate(ctx); });
-  pi.on("session_before_compact", () => { consent.revoke(); });
-  pi.on("session_compact", (_event, ctx) => { consent.activate(ctx); });
+  pi.on("session_start", (_event, ctx) => { resetEligibility(); consent.activate(ctx); });
+  pi.on("session_before_switch", () => { resetEligibility(); consent.revoke(); });
+  pi.on("session_before_fork", () => { resetEligibility(); consent.revoke(); });
+  pi.on("session_before_tree", () => { resetEligibility(); consent.revoke(); });
+  pi.on("session_tree", (_event, ctx) => { resetEligibility(); consent.activate(ctx); });
+  pi.on("session_before_compact", () => { resetEligibility(); consent.revoke(); });
+  pi.on("session_compact", (_event, ctx) => { resetEligibility(); consent.activate(ctx); });
 }

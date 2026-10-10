@@ -48,6 +48,16 @@ for (const mode of ["rpc", "print", "json", undefined]) {
 assert.equal(prompts, 0);
 ctx.mode = "tui";
 await dispatch("session_start", { type: "session_start", reason: "startup" }, ctx);
+const first = await dispatch("tool_call", event("first-native"), ctx);
+assert.equal(first.block, true);
+assert.match(first.reason, /policy_denial=sourcerudder_first/);
+assert.match(first.reason, /mcp__sourcerudder__search_web/);
+assert.match(first.reason, /tools\\.mcp__sourcerudder__/);
+assert.equal(prompts, 0);
+const source = { type: "tool_call", toolName: "mcp__sourcerudder__search_web",
+  toolCallId: "source-failure", input: { query: "fake-only" } };
+assert.equal(await dispatch("tool_call", source, ctx), undefined);
+await dispatch("tool_result", { ...source, type: "tool_result", isError: true, content: [], details: {} }, ctx);
 const allowed = event("approved");
 assert.equal(await dispatch("tool_call", allowed, ctx), undefined);
 assert.ok(Object.isFrozen(allowed));

@@ -23,8 +23,8 @@ Para una instalación por proyecto y el procedimiento de eliminación, consultá
 | Ruta visible de herramientas de Pi | Comportamiento |
 | --- | --- |
 | Ruta directa de SourceRudder, MCP genérico o MCP con espacio de nombres | Permitida y registrada. |
-| `web_search`, `source_check`, `fetch_content`, `get_search_content`, `websearch`, `webfetch` | Denegada por defecto; solo una confirmación TUI local permite esa invocación. |
-| Ruta MCP identificable de búsqueda web o fetch que no sea SourceRudder | Misma confirmación TUI de una ejecución; de lo contrario, denegada. |
+| `web_search`, `source_check`, `fetch_content`, `get_search_content`, `websearch`, `webfetch` | Denegada sin UI; solo tras un error de SourceRudder puede una confirmación TUI local permitir esa invocación. |
+| Ruta MCP identificable de búsqueda web o fetch que no sea SourceRudder | Mismo rechazo con redirección y contingencia de una ejecución solo tras un fallo. |
 | Todas las herramientas de los servidores MCP exactos `playwright` o `browserbase` | Fuera de la confirmación de investigación de ESTA extensión. |
 | Búsqueda local/de código y capacidades MCP no relacionadas | No las bloquea esta política. |
 
@@ -46,10 +46,32 @@ permiten once llamadas sin resolver y se bloquea la duodécima. Solo un
 `tool_result` exitoso de Pi que coincida limpia esa huella. Eventos de resultado
 con error, no coincidentes o ausentes permanecen sin resolver.
 
+## Rutas invocables de SourceRudder
+
+Usá las herramientas declaradas `mcp__sourcerudder__<tool>`: `search_web`,
+`search_doc_oficial`, `search_github`, `search_github_issue`, `search_github_pr`,
+`search_stackoverflow`, `search_reddit`, `search_news`, `fetch_url`,
+`fetch_and_extract`, `deep_research`. Si no están declaradas, usá codemode
+`tools.mcp__sourcerudder__<tool>({...})` con el mismo sufijo y argumentos.
+Las herramientas nativas no son alias de SourceRudder.
+
+`web_search`, `websearch` y `source_check` redirigen a
+`mcp__sourcerudder__search_web` (documentación: `mcp__sourcerudder__search_doc_oficial`;
+GitHub: `mcp__sourcerudder__search_github`). `fetch_content`, `webfetch` y
+`get_search_content` redirigen a `mcp__sourcerudder__fetch_url` o
+`mcp__sourcerudder__fetch_and_extract`.
+
+Un resultado SourceRudder exitoso limpia la elegibilidad para consentimiento,
+incluso con otra huella de la misma sesión. Resultados ausentes o no coincidentes
+no la habilitan. Los hooks de inicio/cambio/fork/tree/cierre y compactación la
+reinician; resultados anteriores al reinicio no la restauran. La guarda 11/12 es independiente.
+
 ## ONE EXECUTION, no un permiso reutilizable
 
-Solo la investigación rechazada por el clasificador abre una confirmación TUI
-local que muestra herramienta, IDs de llamada/padre, operación, JSON canónico
+La investigación rechazada por el clasificador se deniega sin preguntar, con
+una herramienta SourceRudder de reemplazo y `[policy_denial=sourcerudder_first]`.
+Solo cuando el último `tool_result` SourceRudder correlacionado de la sesión tiene
+`isError: true` puede abrir una confirmación TUI local que muestra herramienta, IDs de llamada/padre, operación, JSON canónico
 completo, destino/cwd y motivo de rechazo. Aprobar puede divulgar esos argumentos
 al destino/proveedor. Solo `true` explícito permite esa ejecución. RPC, print,
 JSON y llamadas sin UI se deniegan (incluso con `hasUI: true`); campos o flags de

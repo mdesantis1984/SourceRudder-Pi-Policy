@@ -25,6 +25,13 @@ test("guidance offers only fresh TUI-local one-shot confirmation, never a guard 
   assert.match(POLICY_GUIDANCE, /RPC, print, JSON/);
   assert.match(POLICY_GUIDANCE, /No global disable/);
   assert.doesNotMatch(POLICY_GUIDANCE, /no approval or fallback path/);
+  assert.match(POLICY_GUIDANCE, /without asking/);
+  assert.match(POLICY_GUIDANCE, /Only after the most recent/);
+  assert.match(POLICY_GUIDANCE, /tool_result isError/);
+  assert.match(POLICY_GUIDANCE, /tools\.mcp__sourcerudder__<tool>\(\{\.\.\.\}\)/);
+  for (const tool of ["search_web", "search_doc_oficial", "search_github", "search_github_issue", "search_github_pr", "search_stackoverflow", "search_reddit", "search_news", "fetch_url", "fetch_and_extract", "deep_research"]) {
+    assert.ok(POLICY_GUIDANCE.includes(`mcp__sourcerudder__${tool}`));
+  }
 });
 
 test("recognizes direct, namespaced, and generic SourceRudder MCP routes", () => {

@@ -52,6 +52,7 @@ decisión de instalación.
 
    Señal esperada: `verify-installed: PASS ...`. Usa el loader TypeScript del
 repositorio y el loader de Pi de desarrollo ya instalado. Verifica hooks registrados,
+redirección inicial sin UI, luego error SourceRudder falso seguido de
 aprobación/replay/cierre TUI asíncronos y rechazo RPC/print/JSON. El check del paquete
 valida por separado los 12 archivos permitidos con packlist de npm y tar en memoria,
 sin escribir cachés ni artefactos. Esto no prueba
@@ -60,8 +61,10 @@ una instalación nueva de producción.
 2. En una sesión de Pi recargada, verificá que SourceRudder ya esté disponible a
    través de su configuración MCP separada. Las instrucciones inyectadas deben
    dirigir la investigación web a SourceRudder.
-3. Confirmá que las herramientas nativas conocidas se deniegan sin aprobación TUI
-   local nueva y que las locales/de código siguen disponibles. No ejecutes
+3. Confirmá que las herramientas nativas se deniegan sin preguntar y nombran el
+   reemplazo SourceRudder. ONE EXECUTION solo se ofrece tras un error SourceRudder
+   correlacionado; éxito SourceRudder o reinicio del ciclo de vida limpia la elegibilidad.
+   Las herramientas locales/de código siguen disponibles. No ejecutes
    investigación real para este smoke ni lo tomes como inspección de tráfico.
 4. Para una herramienta/entrada SourceRudder idéntica en una sesión, se permiten
    once llamadas sin resolver y se bloquea la duodécima. Un resultado exitoso que
@@ -79,7 +82,14 @@ Los tests locales no prueban conectividad real, Chrome autenticado ni activació
 La extensión no incluye ni prueba la conectividad de SourceRudder. Un harness
 local exitoso demuestra empaquetado y carga, no disponibilidad del MCP externo.
 
-## Smoke TUI temporal sin red (dirigido por el padre)
+## Smoke TUI temporal histórico sin red (retirado)
+
+El procedimiento siguiente registra el comportamiento anterior que siempre
+preguntaba, no una receta de activación actual. El fixture temporal y su test
+fueron eliminados. No los recrees ni ejecutes como parte de estos checks.
+Con la redirección inicial, el primer intento alternativo no pregunta; los tests
+de consentimiento deben establecer primero un error SourceRudder correlacionado.
+Los tests del repositorio usan resultados falsos deterministas.
 
 Para esta activación, el preflight resolvió el paquete instalado de usuario directamente
 al código del repositorio con Pi `1.0.3`. No hace falta reinstalar, copiar ni editar
@@ -122,10 +132,28 @@ Los mocks deterministas del consentimiento de producción prueban conteos `0/1/1
 **no confirmación humana real**. Diálogo TUI real y disponibilidad de Chrome siguen
 sin probar hasta observar este procedimiento dirigido por el padre.
 
+## Rutas invocables de investigación
+
+Las herramientas declaradas usan `mcp__sourcerudder__<tool>`: `search_web`,
+`search_doc_oficial`, `search_github`, `search_github_issue`, `search_github_pr`,
+`search_stackoverflow`, `search_reddit`, `search_news`, `fetch_url`,
+`fetch_and_extract`, `deep_research`. Si no están declaradas, usá codemode
+`tools.mcp__sourcerudder__<tool>({...})`. `web_search`/`websearch`/`source_check`
+redirigen a `mcp__sourcerudder__search_web` (documentación:
+`mcp__sourcerudder__search_doc_oficial`; GitHub: `mcp__sourcerudder__search_github`).
+`fetch_content`/`webfetch`/`get_search_content` redirigen a
+`mcp__sourcerudder__fetch_url` o `mcp__sourcerudder__fetch_and_extract`.
+El rechazo inicial incluye `[policy_denial=sourcerudder_first]`; no pide buscar
+aprobación humana.
+
 ## Respondé a la confirmación ONE EXECUTION
 
-1. Preferí SourceRudder. Una alternativa rechazada solo puede pedir confirmación
-   en la TUI local; RPC, print, JSON y sin UI deniegan, incluso con `hasUI`.
+1. Usá SourceRudder primero. Una alternativa rechazada se deniega sin preguntar
+   salvo que el último resultado SourceRudder correlacionado de la sesión tenga
+   `isError: true`. Solo entonces puede pedir confirmación TUI local; RPC, print,
+   JSON y sin UI deniegan, incluso con `hasUI`. Éxito y reinicio del ciclo de vida
+   (incluida compactación) limpian la elegibilidad; resultados antiguos o no coincidentes
+   no la habilitan.
 2. Leé herramienta, IDs de llamada/padre, operación, argumentos canónicos completos,
    destino/cwd y motivo del rechazo. Aprobar puede contactar al proveedor/destino
    y divulgar esos argumentos. Entradas demasiado grandes o no representables

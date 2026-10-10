@@ -132,12 +132,34 @@ SourceRudder-first research policy:
    call fingerprint. Human confirmation cannot override this retry guard.
 `;
 
-export const POLICY_GUIDANCE = NARROW_BROWSER_POLICY_GUIDANCE.replace(
+export const PRE_REDIRECT_POLICY_GUIDANCE = NARROW_BROWSER_POLICY_GUIDANCE.replace(
   "5. Local/code tools (grep, find, search_code, search_graph, mem_search) and narrowly\n" +
     "   recognized read-only Playwright inspection remain available without consent.",
   "5. Local/code tools (grep, find, search_code, search_graph, mem_search) and all\n" +
     "   tools on the exact playwright/browserbase MCP servers are outside THIS\n" +
     "   extension's research gate. Other safety/account permissions are independent.",
+);
+
+export const POLICY_GUIDANCE = PRE_REDIRECT_POLICY_GUIDANCE.replace(
+  "1. Use the separately configured SourceRudder MCP for web research first; select\n" +
+    "   its specialized web, documentation, GitHub, community, or URL-retrieval tool.",
+  "1. Use the separately configured SourceRudder MCP first. Declared callable tools:\n" +
+    "   mcp__sourcerudder__search_web, mcp__sourcerudder__search_doc_oficial,\n" +
+    "   mcp__sourcerudder__search_github, mcp__sourcerudder__search_github_issue,\n" +
+    "   mcp__sourcerudder__search_github_pr, mcp__sourcerudder__search_stackoverflow,\n" +
+    "   mcp__sourcerudder__search_reddit, mcp__sourcerudder__search_news,\n" +
+    "   mcp__sourcerudder__fetch_url, mcp__sourcerudder__fetch_and_extract,\n" +
+    "   mcp__sourcerudder__deep_research. When not declared, use codemode:\n" +
+    "   tools.mcp__sourcerudder__<tool>({...}) with the same tool suffix and arguments.",
+).replace(
+  "   by default. Only fresh TUI-local human confirmation can permit ONE EXECUTION\n",
+  "   without asking; retry with SourceRudder instead. Only after the most recent\n" +
+    "   resolved SourceRudder call in this session failed (tool_result isError),\n" +
+    "   fresh TUI-local human confirmation can permit ONE EXECUTION\n",
+).replace(
+  "   RPC, print, JSON and unavailable UI always deny, even if hasUI is true.",
+  "   SourceRudder success or session lifecycle reset clears this eligibility.\n" +
+    "   RPC, print, JSON and unavailable UI always deny, even if hasUI is true.",
 );
 
 /** Exact historic OpenCode blocks are removed only when the whole owned block is present. */
@@ -217,6 +239,7 @@ Research policy (IA-Buscar-first, mandatory):
 
 const OWNED_POLICY_BLOCKS = [
   POLICY_GUIDANCE,
+  PRE_REDIRECT_POLICY_GUIDANCE,
   NARROW_BROWSER_POLICY_GUIDANCE,
   PREVIOUS_POLICY_GUIDANCE,
   LEGACY_POLICY_GUIDANCE,
@@ -447,6 +470,16 @@ export function isNonSourceRudderMcpResearchCall(
   return (
     isKnownWebResearchServer(server) && hasReadVerb(actionTokens(action))
   );
+}
+
+/** Redirect visible denied research to callable SourceRudder routes, without inspecting query text. */
+export function sourceRudderRedirect(toolName: string, args?: unknown): string {
+  const action = stringArgument(args, ["tool", "toolName", "action"]) ?? toolName;
+  const fetch = /fetch|extract|scrape|crawl|get_search_content/i.test(action);
+  const routes = fetch
+    ? "mcp__sourcerudder__fetch_url or mcp__sourcerudder__fetch_and_extract"
+    : "mcp__sourcerudder__search_web (official docs: mcp__sourcerudder__search_doc_oficial; GitHub: mcp__sourcerudder__search_github)";
+  return `Retry with SourceRudder: ${routes}. For codemode-only exposure use tools.mcp__sourcerudder__<tool>(args) with the same tool suffix and arguments.`;
 }
 
 export function classifyToolCall(

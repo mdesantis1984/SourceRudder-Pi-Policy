@@ -28,11 +28,11 @@ require Node.js `>=22.19.0`, matching that Pi release.
 ```text
 Pi agent turn
   -> before_agent_start: preserve host text and append one policy block
-  -> tool_call: classify; allow browser MCP/local; track SourceRudder; gate denied research
+  -> tool_call: classify; allow browser MCP/local; track SourceRudder; redirect denied research without UI unless failure-eligible
   -> one-shot gate: reserve ID -> serialize TUI -> recheck identity -> freeze ORIGINAL -> consume
-  -> tool_result: correlate consent outcome; reset only matching successful SourceRudder
-  -> shutdown/before switch/fork/tree/compact: revoke awaited consent closures
-  -> start/tree/compact: explicitly bind a fresh live manager/session and epoch
+  -> tool_result: correlate outcome; update session eligibility; reset matching successful retry fingerprint
+  -> shutdown/before switch/fork/tree/compact: reset eligibility; revoke awaited consent closures
+  -> start/tree/compact: reset eligibility; bind a fresh live manager/session and epoch
 ```
 
 The extension does not create tools, providers, MCP clients, subprocesses, or
@@ -43,8 +43,8 @@ network connections.
 | Route | Decision |
 | --- | --- |
 | `sourcerudder_*`, `mcp__sourcerudder*`, or an `mcp` call explicitly identifying SourceRudder | Allowed as SourceRudder. |
-| Exact native names `web_search`, `source_check`, `fetch_content`, `get_search_content`, `websearch`, `webfetch` | Denied by default; fresh one-shot local TUI confirmation only. |
-| Identifiable non-SourceRudder MCP web-research route | Same one-shot gate; otherwise denied. |
+| Exact native names `web_search`, `source_check`, `fetch_content`, `get_search_content`, `websearch`, `webfetch` | Denied without UI; fresh one-shot local TUI confirmation only after SourceRudder error. |
+| Identifiable non-SourceRudder MCP web-research route | Same redirect-first denial and failure-only one-shot gate. |
 | All tools on exact browser MCP servers (`playwright`, `browserbase`) | Outside THIS extension's research gate, without research consent. |
 | Ambiguous, local/code, Bash, memory, and unrelated MCP capability | Outside the web-research block. |
 
@@ -60,14 +60,41 @@ receive no exemption. Tool names and operation payloads are not an allowlist:
 tab selection (`index: 0` included), snapshots, navigation, click/fill, evaluation,
 research-like names and unknown operations are all outside this research gate.
 Other safety/account permissions remain independent. Remaining protected research
-stays SourceRudder-first with the unchanged one-shot gate and retry guard.
+stays SourceRudder-first with failure-only eligibility; the one-shot consent
+protections and retry guard remain unchanged.
 Guidance refresh removes the exact prior narrow-browser one-shot block as well
 as older owned blocks, preserving unrelated host text.
+
+## Callable guidance and redirects
+
+The active Pi block names declared `mcp__sourcerudder__<tool>` routes:
+`search_web`, `search_doc_oficial`, `search_github`, `search_github_issue`,
+`search_github_pr`, `search_stackoverflow`, `search_reddit`, `search_news`,
+`fetch_url`, `fetch_and_extract`, `deep_research`. Without declared tools, use
+codemode `tools.mcp__sourcerudder__<tool>({...})`.
+
+Native `web_search`/`websearch`/`source_check` redirect to
+`mcp__sourcerudder__search_web` (docs: `mcp__sourcerudder__search_doc_oficial`;
+GitHub: `mcp__sourcerudder__search_github`). `fetch_content`/`webfetch`/
+`get_search_content` redirect to `mcp__sourcerudder__fetch_url` or
+`mcp__sourcerudder__fetch_and_extract`. Identifiable alternative MCP routes use
+the same search/fetch guidance. The previous complete always-prompt Pi block is
+also replaced; legacy OpenCode guidance remains unchanged.
 
 ## ONE EXECUTION consent boundary
 
 `src/one-shot-consent.ts` owns ephemeral consent, not a permission store. Only
-classifier-denied calls enter it: retry-guard errors never offer an override.
+classifier-denied calls with failure eligibility enter it: retry-guard errors
+never offer an override. Ineligible calls return a replacement route and
+`[policy_denial=sourcerudder_first]` without invoking the consent helper.
+
+Eligibility is session-scoped and changes only on correlated, newly resolved
+SourceRudder results (same session, call ID, tool and input fingerprint).
+`isError: true` enables it; success clears it, irrespective of fingerprint.
+Missing/mismatched results do neither. Errors retain unresolved retry state and
+pending-ID protection but are marked resolved to prevent result replay.
+Every existing start/switch/fork/tree/shutdown/compaction hook resets eligibility
+and advances an epoch; pre-reset pending results cannot enable consent.
 No global disable, automatic provider switching, model-callable grant or approval
 argument/flag is registered. RPC, print, JSON, missing mode and no UI deny even
 with `hasUI: true`. Only the local TUI's explicit boolean `true` can permit a call.

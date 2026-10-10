@@ -50,6 +50,7 @@ user configuration, or project workspace requires its own installation decision.
 
    Expected signal: `verify-installed: PASS ...`. It uses the repository TypeScript
 loader and already installed Pi development loader. It verifies registered hooks,
+first-attempt redirect without UI, then a fake SourceRudder error followed by
 async TUI approval/replay/shutdown, and RPC/print/JSON denial. The package check
 separately validates all 12 allowlisted files with npm's packlist and an in-memory
 tar roundtrip, without cache or artifact writes. This does
@@ -58,8 +59,10 @@ not prove a fresh production installation.
 2. In a reloaded Pi session, verify that SourceRudder is already offered by its
    separate MCP configuration. The injected guidance should direct web research to
    SourceRudder.
-3. Confirm known native research tools deny without fresh local TUI approval,
-   while local/code tools remain available. Do not execute live research as part
+3. Confirm known native research tools deny without asking and name the SourceRudder
+   replacement. ONE EXECUTION is offered only after a correlated SourceRudder error;
+   a successful SourceRudder result or lifecycle reset clears eligibility.
+   Local/code tools remain available. Do not execute live research as part
    of this smoke or treat it as a network-traffic inspection.
 4. For an identical SourceRudder tool/input in one session, eleven unresolved
    calls are permitted and the twelfth is blocked. A matching successful result
@@ -77,7 +80,13 @@ connectivity, authenticated Chrome readiness or current-session activation.
 The extension does not bundle or test SourceRudder connectivity. A passing local
 harness proves packaging and loadability, not external MCP availability.
 
-## Temporary no-network TUI smoke (parent-led)
+## Historical temporary no-network TUI smoke (retired)
+
+The procedure below records the previous always-prompt behavior, not a current
+activation recipe. The temporary fixture and coupled test were removed. Do not
+recreate or run them as part of these checks. With redirect-first enforcement,
+a first alternative attempt does not prompt; consent tests must first establish
+a correlated SourceRudder error. Repository tests use deterministic fake results.
 
 For this activation, preflight resolved the installed user package directly to
 repository source on Pi `1.0.3`. No reinstall, copying or settings edits are needed;
@@ -119,10 +128,26 @@ Deterministic production-consent mocks prove reject/approve/new-ID reject counts
 `0/1/1`, **not actual human confirmation**. Live TUI dialog and Chrome readiness
 remain unproved until this parent-led procedure is observed.
 
+## Callable research routes
+
+Declared tools use `mcp__sourcerudder__<tool>`: `search_web`, `search_doc_oficial`,
+`search_github`, `search_github_issue`, `search_github_pr`, `search_stackoverflow`,
+`search_reddit`, `search_news`, `fetch_url`, `fetch_and_extract`, `deep_research`.
+If not declared, use codemode `tools.mcp__sourcerudder__<tool>({...})`.
+Native `web_search`/`websearch`/`source_check` redirect to
+`mcp__sourcerudder__search_web` (docs: `mcp__sourcerudder__search_doc_oficial`;
+GitHub: `mcp__sourcerudder__search_github`). `fetch_content`/`webfetch`/
+`get_search_content` redirect to `mcp__sourcerudder__fetch_url` or
+`mcp__sourcerudder__fetch_and_extract`. The initial denial carries
+`[policy_denial=sourcerudder_first]`; it is not a request to seek human approval.
+
 ## Respond to ONE EXECUTION confirmation
 
-1. Prefer SourceRudder first. An alternative classified as disallowed can only
-   ask through the local TUI; RPC, print, JSON and no UI deny, even with `hasUI`.
+1. Use SourceRudder first. An alternative classified as disallowed is denied
+   without asking unless the session's most recent correlated SourceRudder result
+   has `isError: true`. Only then can it ask through the local TUI; RPC, print,
+   JSON and no UI deny, even with `hasUI`. Success and session lifecycle reset
+   (including compaction) clear eligibility; stale/mismatched results cannot enable it.
 2. Read the exact tool, call/parent IDs, operation, complete canonical arguments,
    target/cwd and denial reason. Approval can contact that provider/target and
    disclose the displayed arguments; oversized/unrepresentable payloads deny

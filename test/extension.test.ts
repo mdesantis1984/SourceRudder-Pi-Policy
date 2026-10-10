@@ -12,6 +12,7 @@ import sourceRudderPolicyExtension from "../src/index.js";
 import {
   LEGACY_POLICY_GUIDANCE,
   POLICY_GUIDANCE,
+  PRE_REDIRECT_POLICY_GUIDANCE,
 } from "../src/policy.js";
 
 const POLICY_EVENTS = [
@@ -165,6 +166,14 @@ async function dispatchSourceRudderCall(
   );
 }
 
+let failureId = 0;
+async function failSourceRudder(registry: FakeExtensionAPI, ctx: PolicyTestContext): Promise<void> {
+  const id = `failure-${++failureId}`;
+  const input = sourceRudderInput();
+  await dispatchSourceRudderCall(registry, ctx, id, input);
+  await registry.dispatch("tool_result", createToolResult("sourcerudder_search_web", input, id, successfulContent(), true), ctx);
+}
+
 test("browser MCP actions bypass consent in TUI and headless hooks without executing tools", async () => {
   const registry = installPolicy();
   for (const mode of ["tui", "rpc"]) {
@@ -224,7 +233,7 @@ test("registers the documented Pi hooks and refreshes one separated policy block
   const hostPrompt = "Host safety instructions.\n\nSkill instructions.";
   const first = await registry.dispatch(
     "before_agent_start",
-    createBeforeAgentStartEvent(`${hostPrompt}${LEGACY_POLICY_GUIDANCE}${POLICY_GUIDANCE}`),
+    createBeforeAgentStartEvent(`${hostPrompt}${LEGACY_POLICY_GUIDANCE}${PRE_REDIRECT_POLICY_GUIDANCE}${POLICY_GUIDANCE}`),
     createContext("prompt-session"),
   );
   assert.ok(hasSystemPrompt(first));
@@ -240,29 +249,111 @@ test("registers the documented Pi hooks and refreshes one separated policy block
   assert.equal(second.systemPrompt, first.systemPrompt);
 });
 
+test("first research attempts redirect without consent and name callable replacements", async () => {
+  const registry = installPolicy();
+  let prompts = 0;
+  const ctx = { ...createContext("redirect"), mode: "tui", hasUI: true, cwd: "/test",
+    ui: { confirm: async () => { prompts++; return false; } } };
+  for (const name of ["web_search", "websearch", "source_check", "fetch_content", "webfetch", "get_search_content", "mcp__brave__web_search"]) {
+    const result = await registry.dispatch("tool_call", createToolCall(name, {}, name), ctx);
+    assert.ok(isBlockedResult(result));
+    assert.match(result.reason, /\[policy_denial=sourcerudder_first\]/);
+    assert.match(result.reason, /fetch|content/.test(name) ? /mcp__sourcerudder__fetch_url/ : /mcp__sourcerudder__search_web/);
+    if (!/fetch|content/.test(name)) {
+      assert.match(result.reason, /mcp__sourcerudder__search_doc_oficial/);
+      assert.match(result.reason, /mcp__sourcerudder__search_github/);
+    }
+    assert.match(result.reason, /tools\.mcp__sourcerudder__/);
+  }
+  assert.equal(prompts, 0);
+});
+
+test("SourceRudder error enables consent and subsequent success clears it", async () => {
+  const registry = installPolicy();
+  let prompts = 0;
+  const ctx = { ...createContext("eligibility"), mode: "tui", hasUI: true, cwd: "/test",
+    ui: { confirm: async () => { prompts++; return false; } } };
+  const input = sourceRudderInput();
+  await dispatchSourceRudderCall(registry, ctx, "failure", input);
+  await registry.dispatch("tool_result", createToolResult("sourcerudder_search_web", input, "failure", successfulContent(), true), ctx);
+  await registry.dispatch("tool_call", createToolCall("web_search", {}, "eligible"), ctx);
+  assert.equal(prompts, 1);
+  await dispatchSourceRudderCall(registry, ctx, "success", input);
+  await registry.dispatch("tool_result", createToolResult("sourcerudder_search_web", input, "success", successfulContent()), ctx);
+  await registry.dispatch("tool_call", createToolCall("web_search", {}, "ineligible"), ctx);
+  assert.equal(prompts, 1);
+});
+
+for (const lifecycle of ["session_shutdown", "session_start", "session_before_switch", "session_before_fork", "session_before_tree", "session_tree", "session_before_compact", "session_compact"] as const) {
+  test(`${lifecycle} clears eligibility and stale SourceRudder results cannot restore it`, async () => {
+    const registry = installPolicy();
+    let prompts = 0;
+    const ctx = { ...createContext("reset"), mode: "tui", hasUI: true, cwd: "/test",
+      ui: { confirm: async () => { prompts++; return false; } } };
+    await failSourceRudder(registry, ctx);
+    const input = sourceRudderInput("late result");
+    await dispatchSourceRudderCall(registry, ctx, "late", input);
+    await registry.dispatch(lifecycle, { type: lifecycle, reason: "test" }, ctx);
+    await registry.dispatch("tool_result", createToolResult("sourcerudder_search_web", input, "late", successfulContent(), true), ctx);
+    const result = await registry.dispatch("tool_call", createToolCall("web_search", {}, "after-reset"), ctx);
+    assert.ok(isBlockedResult(result));
+    assert.match(result.reason, /policy_denial=sourcerudder_first/);
+    assert.equal(prompts, 0);
+  });
+}
+
+test("only correlated SourceRudder results change eligibility and errors are not replayable", async () => {
+  const registry = installPolicy();
+  let prompts = 0;
+  const ctx = { ...createContext("correlated"), mode: "tui", hasUI: true, cwd: "/test",
+    ui: { confirm: async () => { prompts++; return false; } } };
+  const input = sourceRudderInput();
+  await dispatchSourceRudderCall(registry, ctx, "source", input);
+  for (const result of [
+    createToolResult("sourcerudder_search_web", input, "unknown", [], true),
+    createToolResult("sourcerudder_fetch_url", input, "source", [], true),
+    createToolResult("sourcerudder_search_web", { query: "wrong" }, "source", [], true),
+  ]) await registry.dispatch("tool_result", result, ctx);
+  await registry.dispatch("tool_call", createToolCall("web_search", {}, "not-eligible"), ctx);
+  assert.equal(prompts, 0);
+  await registry.dispatch("tool_result", createToolResult("sourcerudder_search_web", input, "source", [], true), ctx);
+  await registry.dispatch("tool_call", createToolCall("web_search", {}, "eligible"), ctx);
+  assert.equal(prompts, 1);
+  const other = { ...ctx, sessionManager: { getSessionId: () => "other" } };
+  await registry.dispatch("tool_call", createToolCall("web_search", {}, "other-session"), other);
+  assert.equal(prompts, 1);
+  await dispatchSourceRudderCall(registry, ctx, "success", input);
+  await registry.dispatch("tool_result", createToolResult("sourcerudder_search_web", input, "success", []), ctx);
+  await registry.dispatch("tool_result", createToolResult("sourcerudder_search_web", input, "source", [], true), ctx);
+  await registry.dispatch("tool_call", createToolCall("web_search", {}, "replayed-error"), ctx);
+  assert.equal(prompts, 1);
+});
+
 test("explicit local TUI approval allows one blocked research invocation", async () => {
   const registry = installPolicy();
   const ctx = Object.assign(createContext("consent-session"), {
     mode: "tui", hasUI: true, cwd: "/test", ui: { confirm: async () => true },
   });
+  await failSourceRudder(registry, ctx);
   const event = createToolCall("web_search", { query: "approved" }, "consented-call");
   assert.equal(await registry.dispatch("tool_call", event, ctx), undefined);
   assert.ok(Object.isFrozen(event.input));
   assert.ok(isBlockedResult(await registry.dispatch("tool_call", event, ctx)));
 });
 
-test("protected non-browser research still prompts and denies without approval", async () => {
+test("protected non-browser research prompts only after SourceRudder failure and denies without approval", async () => {
   const registry = installPolicy();
   let prompts = 0;
   const ctx = { ...createContext("non-browser"), mode: "tui", hasUI: true, cwd: "/test",
     ui: { confirm: async () => { prompts++; return false; } } };
+  await failSourceRudder(registry, ctx);
   for (const name of ["web_search", "mcp__brave__web_search"]) {
     assert.ok(isBlockedResult(await registry.dispatch("tool_call", createToolCall(name, {}, name), ctx)));
   }
   assert.equal(prompts, 2);
 });
 
-test("only classifier denial prompts; SourceRudder guard and browser MCP never prompt", async () => {
+test("SourceRudder guard and browser MCP never prompt", async () => {
   const registry = installPolicy();
   const ctx = Object.assign(createContext("guard-tui"), { mode: "tui", hasUI: true, cwd: "/test",
     ui: { confirm: async () => assert.fail("allowed calls and guard errors must not prompt") } });
@@ -282,6 +373,7 @@ for (const lifecycle of ["session_shutdown", "session_before_switch", "session_b
     let release!: (b: boolean) => void;
     const ctx = Object.assign(createContext("old"), { mode: "tui", hasUI: true, cwd: "/test",
       ui: { confirm: () => new Promise<boolean>(r => { release = r; }) } });
+    await failSourceRudder(registry, ctx);
     const pending = registry.dispatch("tool_call", createToolCall("web_search", { query: "old" }, "old-call"), ctx);
     await new Promise(r => setImmediate(r));
     await registry.dispatch(lifecycle, { type: lifecycle, reason: "quit" }, ctx);
@@ -291,6 +383,10 @@ for (const lifecycle of ["session_shutdown", "session_before_switch", "session_b
     assert.ok(isBlockedResult(await registry.dispatch("tool_call", createToolCall("web_search", {}, "stale"), ctx)));
     const next = { ...ctx, sessionManager: { getSessionId: () => "new" } };
     await registry.dispatch("session_start", { type: "session_start", reason: "new" }, next);
+    const reset = await registry.dispatch("tool_call", createToolCall("web_search", {}, "new-ineligible"), next);
+    assert.ok(isBlockedResult(reset));
+    assert.match(reset.reason, /policy_denial=sourcerudder_first/);
+    await failSourceRudder(registry, next);
     assert.equal(await registry.dispatch("tool_call", createToolCall("web_search", {}, "new-call"), next), undefined);
     assert.ok(isBlockedResult(await registry.dispatch("tool_call", createToolCall("web_search", {}, "old-again"), ctx)));
   });
@@ -300,6 +396,7 @@ for (const mode of ["rpc", "print", "json", undefined]) {
     const registry = installPolicy();
     const ctx = Object.assign(createContext("non-tui"), { mode, hasUI: true, cwd: "/test",
       ui: { confirm: async () => assert.fail("not human authority") } });
+    await failSourceRudder(registry, ctx);
     assert.ok(isBlockedResult(await registry.dispatch("tool_call", createToolCall("web_search", { approval: true }, "model-approval"), ctx)));
   });
 }
@@ -313,6 +410,7 @@ test("diagnostic integration correlates concurrent denials without prompting or 
     if (!isBlockedResult(result)) executions++;
     return result;
   };
+  await failSourceRudder(registry, base);
   const results = await Promise.all([
     invoke({ ...base, mode: undefined }, "secret-call-a"),
     invoke({ ...base, mode: "secret-mode" }, "secret-call-b"),
@@ -334,6 +432,7 @@ test("blocked stage traces distinguish queue and pending UI with private fixed f
   const registry = installPolicy(); let release!: (b: boolean) => void;
   const ctx = { ...createContext("secret-session"), mode: "tui", hasUI: true, cwd: "/secret-cwd",
     ui: { confirm: () => new Promise<boolean>(r => { release = r; }) } };
+  await failSourceRudder(registry, ctx);
   const invoke = (id: string) => registry.dispatch("tool_call", createToolCall("web_search", { query: "secret-query" }, id), ctx);
   const first = invoke("secret-first"); const second = invoke("secret-second");
   const replay = await invoke("secret-first");
@@ -367,7 +466,7 @@ test("blocks every Pi-visible direct native web research call", async () => {
   assert.deepEqual(result, {
     block: true,
     reason:
-      "SourceRudder Policy blocks this Pi-native or OpenCode-compatible web research tool. [one_shot_stages=none] [one_shot_denial=mode_missing]",
+      "SourceRudder Policy blocks this Pi-native or OpenCode-compatible web research tool. Retry with SourceRudder: mcp__sourcerudder__search_web (official docs: mcp__sourcerudder__search_doc_oficial; GitHub: mcp__sourcerudder__search_github). For codemode-only exposure use tools.mcp__sourcerudder__<tool>(args) with the same tool suffix and arguments. [policy_denial=sourcerudder_first]",
   });
 });
 
@@ -383,11 +482,9 @@ test("uses explicit MCP server identity before a SourceRudder-named tool", async
     }, "spoofed-call"),
     ctx,
   );
-  assert.deepEqual(spoofed, {
-    block: true,
-    reason:
-      "SourceRudder Policy blocks this identifiable non-SourceRudder MCP web research route. [one_shot_stages=none] [one_shot_denial=mode_missing]",
-  });
+  assert.ok(isBlockedResult(spoofed));
+  assert.match(spoofed.reason, /mcp__sourcerudder__search_web/);
+  assert.match(spoofed.reason, /policy_denial=sourcerudder_first/);
 
   assert.equal(
     await registry.dispatch(
@@ -419,11 +516,9 @@ test("blocks non-SourceRudder MCP source_check research", async () => {
     createContext("source-check-session"),
   );
 
-  assert.deepEqual(result, {
-    block: true,
-    reason:
-      "SourceRudder Policy blocks this identifiable non-SourceRudder MCP web research route. [one_shot_stages=none] [one_shot_denial=mode_missing]",
-  });
+  assert.ok(isBlockedResult(result));
+  assert.match(result.reason, /mcp__sourcerudder__search_web/);
+  assert.match(result.reason, /policy_denial=sourcerudder_first/);
 });
 
 test("allows unrelated visible tools, including local MCP file access", async () => {

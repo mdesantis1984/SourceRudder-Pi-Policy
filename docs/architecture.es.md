@@ -29,11 +29,11 @@ Node.js `>=22.19.0`, como esa release de Pi.
 ```text
 Turno de agente de Pi
   -> before_agent_start: preserva texto del host y agrega un bloque de política
-  -> tool_call: clasifica; permite MCP de navegador/local; registra SourceRudder; confirma investigación rechazada
+  -> tool_call: clasifica; permite MCP de navegador/local; registra SourceRudder; redirige investigación rechazada sin UI salvo elegibilidad por fallo
   -> confirmación: reserva ID -> serializa TUI -> verifica identidad -> congela ORIGINAL -> consume
-  -> tool_result: correlaciona resultado; reinicia solo una huella SourceRudder exitosa coincidente
-  -> shutdown/before switch/fork/tree/compact: revoca confirmaciones pendientes
-  -> start/tree/compact: vincula manager/sesión vigentes y epoch nuevo
+  -> tool_result: correlaciona resultado; actualiza elegibilidad; reinicia huella exitosa coincidente
+  -> shutdown/before switch/fork/tree/compact: reinicia elegibilidad; revoca confirmaciones pendientes
+  -> start/tree/compact: reinicia elegibilidad; vincula manager/sesión vigentes y epoch nuevo
 ```
 
 La extensión no crea herramientas, proveedores, clientes MCP, subprocesos ni
@@ -44,8 +44,8 @@ conexiones de red.
 | Ruta | Decisión |
 | --- | --- |
 | `sourcerudder_*`, `mcp__sourcerudder*` o una llamada `mcp` que identifica explícitamente a SourceRudder | Permitida como SourceRudder. |
-| Nombres nativos exactos `web_search`, `source_check`, `fetch_content`, `get_search_content`, `websearch`, `webfetch` | Denegados por defecto; solo confirmación TUI local nueva de una ejecución. |
-| Ruta MCP identificable de investigación web que no sea SourceRudder | Misma confirmación de una ejecución; de lo contrario denegada. |
+| Nombres nativos exactos `web_search`, `source_check`, `fetch_content`, `get_search_content`, `websearch`, `webfetch` | Denegados sin UI; confirmación TUI local nueva solo tras un error SourceRudder. |
+| Ruta MCP identificable de investigación web que no sea SourceRudder | Mismo rechazo con redirección y confirmación solo tras un fallo. |
 | Todas las herramientas de MCP de navegador exactos (`playwright`, `browserbase`) | Fuera de la confirmación de investigación de ESTA extensión. |
 | Capacidad ambigua, local/de código, Bash, memoria o MCP no relacionada | Fuera del bloqueo de investigación web. |
 
@@ -61,16 +61,42 @@ no obtienen exención. No hay allowlist de herramientas ni entradas de operació
 selección de pestañas (incluido `index: 0`), snapshots, navegación, click/fill,
 evaluación y operaciones desconocidas o de investigación quedan fuera de esta confirmación.
 Los permisos de seguridad/cuenta siguen siendo independientes. La investigación
-protegida restante mantiene SourceRudder-first, la confirmación de una ejecución
-y la guarda de reintentos sin cambios. La actualización elimina el bloque exacto
+protegida restante mantiene SourceRudder-first con elegibilidad solo tras un fallo;
+las protecciones del consentimiento y la guarda de reintentos no cambian. La actualización elimina el bloque exacto
 previo de confirmación con navegador limitado y los anteriores bloques propios,
 preservando texto ajeno del host.
+
+## Guía invocable y redirecciones
+
+El bloque Pi activo nombra rutas declaradas `mcp__sourcerudder__<tool>`:
+`search_web`, `search_doc_oficial`, `search_github`, `search_github_issue`,
+`search_github_pr`, `search_stackoverflow`, `search_reddit`, `search_news`,
+`fetch_url`, `fetch_and_extract`, `deep_research`. Sin herramientas declaradas,
+usá codemode `tools.mcp__sourcerudder__<tool>({...})`.
+
+`web_search`/`websearch`/`source_check` redirigen a `mcp__sourcerudder__search_web`
+(documentación: `mcp__sourcerudder__search_doc_oficial`; GitHub:
+`mcp__sourcerudder__search_github`). `fetch_content`/`webfetch`/`get_search_content`
+redirigen a `mcp__sourcerudder__fetch_url` o `mcp__sourcerudder__fetch_and_extract`.
+Las rutas MCP alternativas identificables usan la misma guía de búsqueda/fetch.
+Se reemplaza también el bloque Pi completo anterior que siempre preguntaba;
+la guía legacy de OpenCode no cambia.
 
 ## Límite de consentimiento ONE EXECUTION
 
 `src/one-shot-consent.ts` gestiona consentimiento efímero, no un almacén de permisos.
-Solo entran llamadas rechazadas por el clasificador: errores de la guarda nunca
-ofrecen override. No se registra desactivación global, cambio automático de proveedor,
+Solo entran llamadas rechazadas con elegibilidad por fallo: errores de la guarda
+nunca ofrecen override. Sin elegibilidad se devuelve ruta de reemplazo y
+`[policy_denial=sourcerudder_first]` sin invocar el helper de consentimiento.
+
+La elegibilidad pertenece a la sesión y solo cambia con resultados SourceRudder
+correlacionados recién resueltos (misma sesión, ID, herramienta y huella de entrada).
+`isError: true` la habilita; éxito la limpia independientemente de la huella.
+Resultados ausentes/no coincidentes no cambian nada. Los errores conservan estado
+de reintento sin resolver y protección del ID pendiente, pero se marcan resueltos
+para impedir replay del resultado. Cada hook existente de inicio/cambio/fork/tree/
+cierre/compactación reinicia la elegibilidad y avanza un epoch; resultados
+pendientes anteriores no pueden habilitar consentimiento. No se registra desactivación global, cambio automático de proveedor,
 permiso invocable por modelo ni argumento/flag de aprobación. RPC, print, JSON,
 modo ausente y sin UI deniegan incluso con `hasUI: true`. Solo `true` explícito
 de la TUI local puede permitir una llamada.

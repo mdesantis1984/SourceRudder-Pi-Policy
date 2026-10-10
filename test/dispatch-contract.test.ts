@@ -90,6 +90,16 @@ async function invoke(route: Route, hooks: Hook[], mutateTool = false, productio
   if (production === "extension") sourceRudderPolicyExtension({
     on(name: string, handler: any) { handlers.set(name, [...(handlers.get(name) ?? []), handler]); },
   } as any);
+  if (production === "extension") {
+    const input = { query: "fake SourceRudder failure" };
+    for (const handler of handlers.get("tool_call") ?? []) await handler({
+      type: "tool_call", toolName: "mcp__sourcerudder__search_web", toolCallId: "source-failure", input,
+    }, ctx);
+    for (const handler of handlers.get("tool_result") ?? []) await handler({
+      type: "tool_result", toolName: "mcp__sourcerudder__search_web", toolCallId: "source-failure", input,
+      content: [], isError: true,
+    }, ctx);
+  }
   if (production === "helper") handlers.set("tool_call", [async (event: CallEvent) =>
     await consent.request(event, ctx, "Fake classifier denial") ? undefined : { block: true, reason: "Confirmation denied" }]);
   const runner = new ExtensionRunner(
