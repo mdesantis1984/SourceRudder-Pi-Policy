@@ -109,7 +109,14 @@ negativo y exceso de capacidad; entradas grandes se deniegan, no se truncan.
 
 El vínculo captura ID de sesión, manager vigente, epoch, cwd, herramienta, ID de
 llamada, ID padre, referencia/JSON canónico y señal. Tras esperar el diálogo todo
-debe coincidir. Revocar aborta closures antiguos; una discrepancia de manager/sesión
+debe coincidir. Un predicado opcional de elegibilidad se consulta tras esperar la
+cola, antes de preguntar, y otra vez tras la respuesta, antes de congelar/consumir
+la aprobación. La extensión lo vincula a la sesión y epoch de elegibilidad originales.
+Si un éxito SourceRudder limpia la elegibilidad, las llamadas en cola no preguntan
+y las aprobaciones abiertas no ejecutan; el rechazo nombra el reemplazo e incluye
+`[policy_denial=sourcerudder_first]` y el diagnóstico local `ineligible`.
+Revocar por ciclo de vida también cancela solicitudes abiertas/en cola, conservando
+los diagnósticos existentes de cancelación. Revocar aborta closures antiguos; una discrepancia de manager/sesión
 deniega y revoca, nunca reactiva silenciosamente. Solo el ciclo de vida establece
 el reemplazo. Navegación cancelada o compactación fallida queda revocada hasta un
 evento start/tree/compact nuevo o reload. Cancelación/timeout/excepción de UI/abort,

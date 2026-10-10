@@ -12,6 +12,38 @@ function fixture(confirm: (...args: any[]) => Promise<any> = async () => true) {
   return { gate, ctx, event, switchSession: () => { session = "replacement"; } };
 }
 
+test("eligibility denial reserves the ID and preserves private diagnostics", async () => {
+  let prompts = 0;
+  const f = fixture(async () => { prompts++; return true; });
+  const codes: string[] = [];
+  assert.equal(await f.gate.request(f.event(), f.ctx, "blocked", code => codes.push(code), undefined, () => false), false);
+  assert.deepEqual(codes, ["ineligible"]);
+  assert.equal(prompts, 0);
+  assert.equal(await f.gate.request(f.event(), f.ctx, "blocked", code => codes.push(code), undefined, () => true), false);
+  assert.deepEqual(codes, ["ineligible", "replay"]);
+  assert.equal(prompts, 0);
+  assert.doesNotMatch(JSON.stringify(f.gate.audit()), /secret-query|private|web_search|call/);
+});
+
+for (const checkpoint of ["pre-prompt", "post-answer"] as const) {
+  test(`throwing eligibility predicate fails closed at ${checkpoint}`, async () => {
+    let checks = 0;
+    let prompts = 0;
+    const f = fixture(async () => { prompts++; return true; });
+    const event = f.event();
+    const codes: string[] = [];
+    const eligible = () => {
+      if (++checks === (checkpoint === "pre-prompt" ? 1 : 2)) throw new Error("secret predicate error");
+      return true;
+    };
+    assert.equal(await f.gate.request(event, f.ctx, "blocked", code => codes.push(code), undefined, eligible), false);
+    assert.deepEqual(codes, ["context_error"]);
+    assert.equal(prompts, checkpoint === "pre-prompt" ? 0 : 1);
+    assert.equal(Object.isFrozen(event), false);
+    assert.equal(await f.gate.request(event, f.ctx, "blocked"), false);
+  });
+}
+
 test("explicit TUI consent consumes once and freezes original graph/event", async () => {
   const f = fixture(); const e = f.event();
   assert.equal(await f.gate.request(e, f.ctx, "blocked"), true);

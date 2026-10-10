@@ -68,14 +68,17 @@ export default function sourceRudderPolicyExtension(pi: ExtensionAPI): void {
   pi.on("tool_call", async (event, ctx) => {
     const decision = classifyToolCall(event.toolName, event.input);
     if (!decision.allowed) {
-      if (!failedSourceRudderSessions.has(sessionIdFor(ctx))) {
-        return { block: true, reason: `${decision.reason} ${sourceRudderRedirect(event.toolName, event.input)} [policy_denial=sourcerudder_first]` };
-      }
+      const sessionId = sessionIdFor(ctx);
+      const epoch = eligibilityEpoch;
+      const eligible = (): boolean => eligibilityEpoch === epoch && failedSourceRudderSessions.has(sessionId);
+      const redirect = (): string => `${decision.reason} ${sourceRudderRedirect(event.toolName, event.input)} [policy_denial=sourcerudder_first]`;
+      if (!eligible()) return { block: true, reason: redirect() };
       // Invocation-local observation: parallel calls cannot borrow a last-result code.
-      let denial: ConsentDenialCode = "context_error";
+      const denial: { code: ConsentDenialCode } = { code: "context_error" };
       const stages: ConsentStage[] = [];
-      if (await consent.request(event, ctx, decision.reason, code => { denial = code; }, stage => { stages.push(stage); })) return;
-      return { block: true, reason: `${decision.reason} [one_shot_stages=${stages.join(",") || "none"}] [one_shot_denial=${denial}]` };
+      if (await consent.request(event, ctx, decision.reason, code => { denial.code = code; }, stage => { stages.push(stage); }, eligible)) return;
+      const reason = denial.code === "ineligible" ? redirect() : decision.reason;
+      return { block: true, reason: `${reason} [one_shot_stages=${stages.join(",") || "none"}] [one_shot_denial=${denial.code}]` };
     }
     if (decision.classification !== "sourcerudder") return;
 

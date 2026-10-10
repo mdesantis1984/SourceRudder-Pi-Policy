@@ -107,7 +107,13 @@ overflow; oversized input is denied rather than truncated for approval.
 
 Binding captures session ID, live manager, epoch, cwd, tool name, call ID, parent
 ID, input reference/canonical JSON and signal. After the awaited dialog all must
-still match. Revocation aborts old closures; manager/session mismatch denies and
+still match. An optional eligibility predicate is checked after queue wait before
+prompting, and again after the answer before freezing/consuming approval. The
+extension binds it to the submitting session and eligibility epoch. If SourceRudder
+success clears eligibility, queued calls do not prompt and open approvals cannot
+execute; denial names the replacement and carries `[policy_denial=sourcerudder_first]`
+plus the request-local `ineligible` diagnostic. Lifecycle revocation also cancels
+queued/open requests, retaining the existing cancellation diagnostics. Revocation aborts old closures; manager/session mismatch denies and
 revokes, never silently reactivates. Lifecycle activation alone establishes the
 replacement. Cancelled navigation or failed compaction stays revoked until a fresh
 start/tree/compact event or runtime reload. Cancel/timeout/UI exceptions/abort,

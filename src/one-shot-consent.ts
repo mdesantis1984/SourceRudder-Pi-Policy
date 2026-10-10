@@ -21,7 +21,7 @@ export type ConsentDenialCode =
   | "invalid_session" | "invalid_cwd" | "invalid_tool" | "invalid_parent_id"
   | "canonical_input" | "display_capacity" | "context_error"
   | "manager_session_change" | "queue_capacity" | "context_drift"
-  | "not_confirmed" | "ui_error" | "timeout" | "cancelled" | "freeze_error";
+  | "not_confirmed" | "ui_error" | "timeout" | "cancelled" | "freeze_error" | "ineligible";
 type DenialObserver = (code: ConsentDenialCode) => void;
 export type ConsentStage =
   | "queue_entered" | "queue_left" | "confirm_entered" | "confirm_resolved" | "cancelled";
@@ -124,7 +124,7 @@ export class OneShotConsent {
     this.active = true;
   }
 
-  async request(event: Call, ctx: Context, reason: string, observeDenial?: DenialObserver, observeStage?: StageObserver): Promise<boolean> {
+  async request(event: Call, ctx: Context, reason: string, observeDenial?: DenialObserver, observeStage?: StageObserver, eligible: () => boolean = () => true): Promise<boolean> {
     const request = randomUUID();
     let denied = false;
     // Fixed stages, at most once each. Detach on error/decision so unresolved UI
@@ -211,6 +211,8 @@ export class OneShotConsent {
         await previous;
         stage("queue_left");
         if (!valid()) return deny(driftCode());
+        // Eligibility can expire while this request waits behind an open dialog.
+        if (!eligible()) return deny("ineligible");
         workPhase = "ui_error";
         // The documented UI owns dismissal. Holding the serial slot until it settles
         // prevents another overlay replacing an old dialog even during cancellation.
@@ -218,8 +220,10 @@ export class OneShotConsent {
         const confirmed = await ctx.ui.confirm("SourceRudder contingency — ONE EXECUTION", `${display}\n\nAllow ONE EXECUTION via this alternative research route? It may contact the target/provider and disclose these arguments. No standing permission; frozen-input tools may fail. Never automatically retry.`,
           { signal: controller.signal, timeout: TIMEOUT });
         stage("confirm_resolved");
-        if (confirmed !== true) return deny("not_confirmed");
         workPhase = "context_error";
+        // A displayed confirmation is not authority after the contingency ends.
+        if (!eligible()) return deny("ineligible");
+        if (confirmed !== true) return deny("not_confirmed");
         if (!valid()) return deny(driftCode());
         workPhase = "freeze_error";
         freezeApprovedCall(event);

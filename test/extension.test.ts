@@ -249,6 +249,95 @@ test("registers the documented Pi hooks and refreshes one separated policy block
   assert.equal(second.systemPrompt, first.systemPrompt);
 });
 
+async function succeedSourceRudder(registry: FakeExtensionAPI, ctx: PolicyTestContext): Promise<void> {
+  const id = `success-${++failureId}`;
+  const input = sourceRudderInput();
+  await dispatchSourceRudderCall(registry, ctx, id, input);
+  await registry.dispatch("tool_result", createToolResult("sourcerudder_search_web", input, id, successfulContent()), ctx);
+}
+
+test("queued research does not prompt after SourceRudder success clears eligibility", async () => {
+  const registry = installPolicy();
+  let prompts = 0;
+  let release!: (answer: boolean) => void;
+  const ctx = { ...createContext("queued-success"), mode: "tui", hasUI: true, cwd: "/test",
+    ui: { confirm: async () => { prompts++; return prompts === 1 ? new Promise<boolean>(resolve => { release = resolve; }) : true; } } };
+  await failSourceRudder(registry, ctx);
+  const first = registry.dispatch("tool_call", createToolCall("web_search", {}, "open"), ctx);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(prompts, 1);
+  const queued = registry.dispatch("tool_call", createToolCall("webfetch", {}, "queued"), ctx);
+  await succeedSourceRudder(registry, ctx);
+  release(false);
+  await first;
+  const result = await queued;
+  assert.equal(prompts, 1, "Queued call must not open a second confirmation");
+  assert.ok(isBlockedResult(result));
+  assert.match(result.reason, /policy_denial=sourcerudder_first/);
+  assert.match(result.reason, /mcp__sourcerudder__fetch_url/);
+});
+
+test("open approval cannot execute after SourceRudder success clears eligibility", async () => {
+  const registry = installPolicy();
+  let release!: (answer: boolean) => void;
+  let executions = 0;
+  const ctx = { ...createContext("open-success"), mode: "tui", hasUI: true, cwd: "/test",
+    ui: { confirm: () => new Promise<boolean>(resolve => { release = resolve; }) } };
+  await failSourceRudder(registry, ctx);
+  const event = createToolCall("web_search", {}, "open");
+  const pending = registry.dispatch("tool_call", event, ctx);
+  await new Promise(resolve => setImmediate(resolve));
+  await succeedSourceRudder(registry, ctx);
+  release(true);
+  const result = await pending;
+  if (!isBlockedResult(result)) executions++;
+  assert.equal(executions, 0, "Expired eligibility cannot authorize execution");
+  assert.ok(isBlockedResult(result));
+  assert.match(result.reason, /policy_denial=sourcerudder_first/);
+  assert.match(result.reason, /mcp__sourcerudder__search_web/);
+  assert.equal(Object.isFrozen(event), false, "Denied approval must not freeze a dispatch lease");
+});
+
+for (const lifecycle of ["session_shutdown", "session_start", "session_before_switch", "session_before_fork", "session_before_tree", "session_tree", "session_before_compact", "session_compact"] as const) {
+  test(`${lifecycle} denies queued and open research without a second prompt`, async () => {
+    const registry = installPolicy();
+    let prompts = 0;
+    let release!: (answer: boolean) => void;
+    const ctx = { ...createContext(`queued-${lifecycle}`), mode: "tui", hasUI: true, cwd: "/test",
+      ui: { confirm: async () => { prompts++; return prompts === 1 ? new Promise<boolean>(resolve => { release = resolve; }) : true; } } };
+    await failSourceRudder(registry, ctx);
+    const open = registry.dispatch("tool_call", createToolCall("web_search", {}, "open"), ctx);
+    await new Promise(resolve => setImmediate(resolve));
+    const queued = registry.dispatch("tool_call", createToolCall("web_search", {}, "queued"), ctx);
+    await registry.dispatch(lifecycle, { type: lifecycle, reason: "test" }, ctx);
+    release(true);
+    assert.ok(isBlockedResult(await open));
+    assert.ok(isBlockedResult(await queued));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(prompts, 1);
+  });
+}
+
+test("still-eligible queued research prompts normally and preserves single-use approval", async () => {
+  const registry = installPolicy();
+  let prompts = 0;
+  let release!: (answer: boolean) => void;
+  const ctx = { ...createContext("queued-eligible"), mode: "tui", hasUI: true, cwd: "/test",
+    ui: { confirm: async () => { prompts++; return prompts === 1 ? new Promise<boolean>(resolve => { release = resolve; }) : true; } } };
+  await failSourceRudder(registry, ctx);
+  const open = registry.dispatch("tool_call", createToolCall("web_search", {}, "open"), ctx);
+  await new Promise(resolve => setImmediate(resolve));
+  const event = createToolCall("web_search", {}, "queued");
+  const queued = registry.dispatch("tool_call", event, ctx);
+  release(false);
+  assert.ok(isBlockedResult(await open));
+  assert.equal(await queued, undefined);
+  assert.equal(prompts, 2);
+  assert.ok(Object.isFrozen(event));
+  assert.ok(isBlockedResult(await registry.dispatch("tool_call", event, ctx)));
+  assert.equal(prompts, 2);
+});
+
 test("first research attempts redirect without consent and name callable replacements", async () => {
   const registry = installPolicy();
   let prompts = 0;
