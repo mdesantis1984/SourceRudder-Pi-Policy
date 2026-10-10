@@ -20,9 +20,10 @@ In the target Pi session, run:
 ```
 
 `npm run check` must pass before installation. It typechecks, runs policy tests,
-checks the packed manifest, validates bilingual documentation, and packs,
-production-installs, and loads the extension in a temporary directory. It neither
-changes Pi settings nor invokes a model/provider.
+checks npm's packlist and an in-memory tar manifest, validates bilingual documentation, and
+loads the entry through the already installed Pi loader with async mode/consent
+fixtures. It performs no fresh installation, changes no Pi settings and invokes
+no model/provider.
 
 ## Choose the installation scope
 
@@ -47,22 +48,107 @@ user configuration, or project workspace requires its own installation decision.
    npm run verify:installed
    ```
 
-   Expected signal: `verify-installed: PASS ...`. It runs `npm pack` with scripts
-disabled, installs the tarball with production dependencies in a temporary
-directory, and imports the declared extension entry through this repository's
-TypeScript loader.
+   Expected signal: `verify-installed: PASS ...`. It uses the repository TypeScript
+loader and already installed Pi development loader. It verifies registered hooks,
+async TUI approval/replay/shutdown, and RPC/print/JSON denial. The package check
+separately validates all 12 allowlisted files with npm's packlist and an in-memory
+tar roundtrip, without cache or artifact writes. This does
+not prove a fresh production installation.
 
 2. In a reloaded Pi session, verify that SourceRudder is already offered by its
    separate MCP configuration. The injected guidance should direct web research to
    SourceRudder.
-3. Confirm known native research tools are rejected and local/code tools remain
-   available. Do not treat this as a network-traffic inspection.
+3. Confirm known native research tools deny without fresh local TUI approval,
+   while local/code tools remain available. Do not execute live research as part
+   of this smoke or treat it as a network-traffic inspection.
 4. For an identical SourceRudder tool/input in one session, eleven unresolved
    calls are permitted and the twelfth is blocked. A matching successful result
    clears only that session fingerprint.
 
+All tools on exact `playwright` and `browserbase` MCP servers are outside THIS
+extension's research gate, including tab selection with `index: 0`, snapshots,
+navigation, click/fill, evaluation, research-like names and unknown operations.
+Generic and namespaced routes require consistent exact server identities; foreign
+namespaces and contradictory aliases fail closed. Other safety/account permissions
+remain independent. Remaining protected research stays SourceRudder-first and uses
+the separate one-shot TUI gate below. Local tests do not prove live browser
+connectivity, authenticated Chrome readiness or current-session activation.
+
 The extension does not bundle or test SourceRudder connectivity. A passing local
 harness proves packaging and loadability, not external MCP availability.
+
+## Temporary no-network TUI smoke (parent-led)
+
+For this activation, preflight resolved the installed user package directly to
+repository source on Pi `1.0.3`. No reinstall, copying or settings edits are needed;
+project `.pi/settings.json` is absent. Registration alone is not loaded-state proof.
+
+1. After checks/review, the **human** runs `/reload` in the target TUI. The temporary
+   `.pi/extensions/one-shot-policy-smoke.ts` autoloads from the trusted project.
+   At `session_start` it checks `pi.getAllTools()` for collisions before registering
+   three distinct tools; it refuses collisions rather than shadowing tools. Loading
+   and startup execute no tools. Stop if it fails to load or the expected gate is absent.
+2. Call `policy_smoke_status` with `{}`: expect `executions: 0`, `disabled: false`.
+   Call **only** the fake `mcp__policy_smoke__web_search` with exactly
+   `{"sample":"local-only-no-network"}`. Human **rejects** the production
+   ONE EXECUTION dialog; status must still report **0**.
+3. Make a new invocation with a **new call ID** and the same fixed input. Human
+   **approves** the displayed exact fake call in the TUI; expect the fixed LOCAL
+   response and status **1**. No model-supplied approval data is permission.
+4. Make another invocation with a **new call ID**, same input. A fresh dialog must
+   appear; human **rejects** it. Status must remain **1**. Never automatically retry.
+5. Only after updated policy is active, the parent may inspect actual Chrome with
+   `mcp__playwright__browser_get_config` `{}` and `mcp__playwright__browser_tabs`
+   `{"action":"list"}` as a limited connectivity check, not the exclusion's scope.
+   Browser actions still require independent safety/account authorization; this
+   implementation does not authorize live calls or run real blocked research.
+6. Call `policy_smoke_disable` `{}` to hide only the three fixture tools using
+   re-registration with `exposure: "hidden"` and remove only their active names.
+   It does not disable policy. The parent removes the temporary fixture **and its
+   coupled `test/smoke-fixture.test.ts` test asset**, then the human runs a second
+   `/reload`. Removal without reload does not unload existing definitions; reload
+   while the file remains would create a fresh fixture/counter. Confirm fixture
+   names are gone and production policy remains active.
+
+This is an ephemeral test asset, not a shipped capability: the package allowlist
+remains 12 files and excludes `.pi` and tests. The fixture only holds an in-memory
+counter capped at three successful executions and returns fixed local text. It has
+no network/browser/file/process actions, delegated tools or consent implementation.
+Status is read-only; disable only withdraws its own definitions, with no self-delete.
+Deterministic production-consent mocks prove reject/approve/new-ID reject counts
+`0/1/1`, **not actual human confirmation**. Live TUI dialog and Chrome readiness
+remain unproved until this parent-led procedure is observed.
+
+## Respond to ONE EXECUTION confirmation
+
+1. Prefer SourceRudder first. An alternative classified as disallowed can only
+   ask through the local TUI; RPC, print, JSON and no UI deny, even with `hasUI`.
+2. Read the exact tool, call/parent IDs, operation, complete canonical arguments,
+   target/cwd and denial reason. Approval can contact that provider/target and
+   disclose the displayed arguments; oversized/unrepresentable payloads deny
+   before prompting, and terminal controls are escaped rather than executed.
+3. Approve only this execution or decline. No standing permission, global policy
+   disable, model-callable grant, approval flag or automatic provider switching exists.
+4. A retry after success, error, timeout or later hook denial needs a new ID and
+   fresh confirmation. Abort, cancellation, UI exception, identity/input mutation
+   or session/context change denies; no automatic retry or restored grant.
+
+Dialogs serialize, have a 30-second deadline including queue time, and cap pending
+requests at eight. IDs are reserved before allow/deny and never evicted (4096 per
+runtime); capacity exhaustion denies. Audit retains at most 256 in-memory statuses
+and opaque request IDs, never raw arguments, dialog text, private cwd or fingerprints.
+A UI that ignores cancellation keeps its serial slot until it settles; restart or
+reload the runtime rather than automatically retrying. Cancelled session navigation
+or failed compaction leaves consent revoked until a real start/tree/compact event
+or reload establishes a fresh lifecycle. Stale shutdown contexts do not reactivate it.
+
+Inputs and the original event are deeply frozen before returning allow. A tool
+that mutates its input may fail after entry, without rollback or universal tool
+compatibility. Real-dispatch tests cover Pi/agent-core `0.85.1` model execution
+(direct/nested unavailable) and `1.0.3` model/direct/nested, including codemode-style
+IDs. These fake-tool tests prove no unapproved later-hook variant executes, not
+live authenticated browser readiness or compatibility with unknown Pi versions.
+The SourceRudder 11/12 guard remains independent and cannot be overridden by consent.
 
 ## Reload and removal
 

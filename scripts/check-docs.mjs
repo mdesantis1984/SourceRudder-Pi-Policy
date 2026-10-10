@@ -104,6 +104,16 @@ for (const document of documents) {
     assert.ok(content.includes(text), `${document} must include: ${text}`);
   }
   assert.doesNotMatch(content, /npm publish|release candidate/i);
+  assert.ok(content.includes("ONE EXECUTION"), `${document} must explain one-shot consent`);
+  for (const term of ["TUI", "RPC", "JSON", "0.85.1", "1.0.3"]) {
+    assert.ok(content.includes(term), `${document} must preserve mode/runtime evidence: ${term}`);
+  }
+  for (const term of ["`playwright`", "`browserbase`", "index: 0", "SourceRudder-first"]) {
+    assert.ok(content.includes(term), `${document} must explain whole-browser MCP exclusion: ${term}`);
+  }
+  assert.doesNotMatch(content, /preserve_existing_navigation|strict config aliases\/tabs-list|alias estrictos de configuración/i);
+  assert.doesNotMatch(content, /no approval or fallback path|sin aprobación ni ruta alternativa/i);
+  assert.doesNotMatch(content, /production-installs|production-installed|instalada para producción|instala para producción/i);
 }
 
 for (const [english, spanish] of bilingualPairs) {

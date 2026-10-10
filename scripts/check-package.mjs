@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
-import { access, mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, realpath } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 
-const execute = promisify(execFile);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-const temporaryRoot = await mkdtemp(join(tmpdir(), "pi-sourcerudder-package-"));
+// Use npm's installed packaging engine directly: even `npm pack --dry-run`
+// writes its cache. Build and inspect the tar stream in memory, without scripts,
+// installers, cache writes, or temporary artifacts.
+const npmRequire = createRequire(await realpath(process.env.npm_execpath ?? "/usr/bin/npm"));
+const packlist = npmRequire("npm-packlist");
+const Arborist = npmRequire("@npmcli/arborist");
+const tar = npmRequire("tar");
 const expectedFiles = [
   "LICENSE",
   "README.es.md",
@@ -20,6 +22,7 @@ const expectedFiles = [
   "docs/architecture.md",
   "package.json",
   "src/index.ts",
+  "src/one-shot-consent.ts",
   "src/policy.ts",
   "src/retry-guard.ts",
 ].sort();
@@ -59,7 +62,7 @@ function assertPackageMetadata(metadata) {
 }
 
 async function assertExternalMcpBoundary() {
-  const runtimeFiles = ["src/index.ts", "src/policy.ts", "src/retry-guard.ts"];
+  const runtimeFiles = ["src/index.ts", "src/policy.ts", "src/retry-guard.ts", "src/one-shot-consent.ts"];
   const sources = await Promise.all(
     runtimeFiles.map((file) => readFile(join(root, file), "utf8")),
   );
@@ -73,24 +76,13 @@ async function assertExternalMcpBoundary() {
   }
 }
 
-try {
+{
   const metadata = await readJson("package.json");
   assertPackageMetadata(metadata);
   await assertExternalMcpBoundary();
 
-  const { stdout } = await execute(
-    npm,
-    ["pack", "--ignore-scripts", "--json", "--pack-destination", temporaryRoot],
-    { cwd: root, maxBuffer: 1024 * 1024 },
-  );
-  const manifests = JSON.parse(stdout);
-  assert.equal(manifests.length, 1, "npm pack must produce one manifest");
-
-  const [manifest] = manifests;
-  assert.equal(typeof manifest.filename, "string");
-  await access(join(temporaryRoot, manifest.filename));
-
-  const packedFiles = manifest.files.map(({ path }) => path).sort();
+  const tree = await new Arborist({ path: root }).loadActual();
+  const packedFiles = (await packlist(tree)).sort();
   assert.deepEqual(packedFiles, expectedFiles, "npm pack must honor the allowlist");
   for (const path of packedFiles) {
     assert.equal(forbiddenFiles.has(path), false, `forbidden package file: ${path}`);
@@ -101,9 +93,16 @@ try {
     );
   }
 
-  console.log(
-    `check-package: PASS ${manifest.entryCount} allowlisted files, ${manifest.unpackedSize} bytes unpacked`,
-  );
-} finally {
-  await rm(temporaryRoot, { recursive: true, force: true });
+  const entries = [];
+  const reader = tar.t({ onentry(entry) { entries.push(entry.path.replace(/^package\//, "")); } });
+  const completed = new Promise((resolve, reject) => {
+    reader.on("end", resolve);
+    reader.on("error", reject);
+  });
+  const archive = tar.c({ cwd: root, prefix: "package/", portable: true }, packedFiles);
+  archive.on("error", error => reader.destroy(error));
+  archive.pipe(reader);
+  await completed;
+  assert.deepEqual(entries.sort(), expectedFiles, "in-memory tar must honor npm's packlist");
+  console.log(`check-package: PASS ${entries.length} allowlisted files, npm packlist and in-memory tar; no cache/artifact writes`);
 }

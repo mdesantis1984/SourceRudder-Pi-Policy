@@ -54,8 +54,6 @@ const WEB_RESEARCH_SERVERS = new Set([
   "duckduckgo",
   "firecrawl",
   "jina",
-  "browserbase",
-  "playwright",
   "github",
   "gitlab",
   "npm",
@@ -90,7 +88,7 @@ const RESEARCH_READ_VERBS = new Set([
  * process. It deliberately states the enforcement boundary rather than
  * promising network isolation that Pi cannot provide.
  */
-export const POLICY_GUIDANCE = `${POLICY_SENTINEL}
+export const PREVIOUS_POLICY_GUIDANCE = `${POLICY_SENTINEL}
 SourceRudder-first research policy:
 
 1. Use the separately configured SourceRudder MCP for web research. Choose its
@@ -108,6 +106,39 @@ SourceRudder-first research policy:
    the twelfth is blocked. A successful result clears only that session and
    call fingerprint.
 `;
+
+const NARROW_BROWSER_POLICY_GUIDANCE = `${POLICY_SENTINEL}
+SourceRudder-first research policy:
+
+1. Use the separately configured SourceRudder MCP for web research first; select
+   its specialized web, documentation, GitHub, community, or URL-retrieval tool.
+2. Pi-native web_search, source_check, fetch_content, get_search_content,
+   websearch, webfetch and identifiable non-SourceRudder MCP research are denied
+   by default. Only fresh TUI-local human confirmation can permit ONE EXECUTION
+   of the exact displayed operation, arguments and target in the live session.
+   RPC, print, JSON and unavailable UI always deny, even if hasUI is true.
+3. No global disable, automatic provider switching, model-callable grant or
+   approval argument/flag exists. Decline, cancel, timeout, error, abort, changed
+   context or replay denies. Every retry needs a new call ID and human approval;
+   neither tool errors nor later hook denials restore permission. Input is frozen
+   before dispatch; input-mutating tools may fail without rollback or auto retry.
+4. This policy enforces only tool calls visible to Pi. It does not configure,
+   bundle, or start SourceRudder, and it cannot intercept hidden network traffic
+   performed inside the separately running external SourceRudder MCP process.
+5. Local/code tools (grep, find, search_code, search_graph, mem_search) and narrowly
+   recognized read-only Playwright inspection remain available without consent.
+6. Eleven identical unresolved SourceRudder calls are permitted in a session;
+   the twelfth is blocked. A successful result clears only that session and
+   call fingerprint. Human confirmation cannot override this retry guard.
+`;
+
+export const POLICY_GUIDANCE = NARROW_BROWSER_POLICY_GUIDANCE.replace(
+  "5. Local/code tools (grep, find, search_code, search_graph, mem_search) and narrowly\n" +
+    "   recognized read-only Playwright inspection remain available without consent.",
+  "5. Local/code tools (grep, find, search_code, search_graph, mem_search) and all\n" +
+    "   tools on the exact playwright/browserbase MCP servers are outside THIS\n" +
+    "   extension's research gate. Other safety/account permissions are independent.",
+);
 
 /** Exact historic OpenCode blocks are removed only when the whole owned block is present. */
 export const LEGACY_POLICY_GUIDANCE = `
@@ -186,6 +217,8 @@ Research policy (IA-Buscar-first, mandatory):
 
 const OWNED_POLICY_BLOCKS = [
   POLICY_GUIDANCE,
+  NARROW_BROWSER_POLICY_GUIDANCE,
+  PREVIOUS_POLICY_GUIDANCE,
   LEGACY_POLICY_GUIDANCE,
   ADVISORY_POLICY_GUIDANCE,
   IA_BUSCAR_LEGACY_POLICY_GUIDANCE,
@@ -268,6 +301,7 @@ function isKnownWebResearchServer(value: string | undefined): boolean {
  * does not provide a server identity.
  */
 export function isSourceRudderCall(toolName: string, args?: unknown): boolean {
+  if (browserServerDecision(toolName, args) !== undefined) return false;
   if (toolName.toLowerCase().startsWith("sourcerudder_")) return true;
 
   if (isNamespacedMcpTool(toolName)) {
@@ -360,6 +394,29 @@ function isExplicitWebResearchAction(action: string): boolean {
   return false;
 }
 
+const BROWSER_SERVERS = new Set(["playwright", "browserbase"]);
+const SERVER_KEYS = ["server", "serverName", "mcpServer"] as const;
+
+/** Whole-server exclusion; conflicting browser identity claims fail closed. */
+function browserServerDecision(
+  toolName: string,
+  args: unknown,
+): boolean | undefined {
+  if (!isMcpGatewayTool(toolName)) return undefined;
+  const parts = isNamespacedMcpTool(toolName) ? toolName.split("__").slice(1) : [];
+  const record = isRecord(args) ? args : {};
+  const servers = SERVER_KEYS.filter((key) => key in record).map((key) => record[key]);
+  if (parts.length) servers.push(parts[0]);
+  const browser = servers.find(
+    (server) => typeof server === "string" && BROWSER_SERVERS.has(server.toLowerCase()),
+  );
+  if (typeof browser !== "string") return undefined;
+  if (parts.length > 2 || parts.some((part) => part === "")) return false;
+  return servers.every(
+    (server) => typeof server === "string" && server.toLowerCase() === browser.toLowerCase(),
+  );
+}
+
 /**
  * Identifies only visible MCP routes with an explicit web-research action.
  * Ambiguous actions such as a bare `search` remain allowed unless their MCP
@@ -369,6 +426,8 @@ export function isNonSourceRudderMcpResearchCall(
   toolName: string,
   args?: unknown,
 ): boolean {
+  const browser = browserServerDecision(toolName, args);
+  if (browser !== undefined) return !browser;
   if (!isMcpGatewayTool(toolName) || isSourceRudderCall(toolName, args)) {
     return false;
   }
